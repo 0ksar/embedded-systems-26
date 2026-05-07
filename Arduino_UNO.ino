@@ -11,14 +11,14 @@ Wheels w;
 volatile char cmd;
 
 // -- Config variables --
-uint8_t DEF_SPEED = 100;                   // Speed value used in goForward and goBack
-uint16_t LCD_FREQ = 100;                   // LCD refresh frequency (in ms)
+uint8_t DEF_SPEED = 150;                   // Speed value used in goForward and goBack
+uint16_t LCD_FREQ = 500;                   // LCD refresh frequency (in ms)
 bool ANIMATE = true;                       // LCD animation flag (false = off)
 const unsigned long BEEP_PERIOD = 500000;  // Less = faster default beeping
 // BEEP_PERIOD = 500000 -> 75 speed: 1Hz, 150: 2Hz, 225: 3Hz, ...
-float WHEEL_DIAM = 5;                      // Wheel diameter (in cm)
-uint8_t SLOT_CNT = 4;                      // Number of slots on the wheel
-float WHEEL_SPAC = 10;                     // Wheel spacing (in cm)
+float WHEEL_DIAM = 6;                      // Wheel diameter (in cm)
+uint8_t SLOT_CNT = 12;                     // Number of slots on the wheel
+float WHEEL_SPAC = 15;                     // Wheel spacing (in cm)
 
 // -- NOT config variables (do not touch) --
 unsigned long animationStep = 0;           // Last animation state change (time, ms)
@@ -76,7 +76,7 @@ void updateLCD(const MotionState& state, int cm) {
   // Blinking animation
   lcd.setCursor(6,1);
   unsigned long now = millis();
-  if (ANIMATE && now - animationStep > 500) {
+  if (ANIMATE && now - animationStep > 250) {
     lcd.print("    ");
     animationStep = now;
   } else {
@@ -122,9 +122,9 @@ ISR(PCINT1_vect) {
   uint8_t a0 = (pins & (1 << PC0)) != 0;
   uint8_t a1 = (pins & (1 << PC1)) != 0;
 
-  // Count only LOW -> HIGH
-  if (a0 && !prevA0) w.leftImpulse();
-  if (a1 && !prevA1) w.rightImpulse();
+  // Count only HIGH -> LOW
+  if (!a0 && prevA0) w.leftImpulse();
+  if (!a1 && prevA1) w.rightImpulse();
   prevA0 = a0;
   prevA1 = a1;
 }
@@ -132,14 +132,14 @@ ISR(PCINT1_vect) {
 // -- ARDUINO functions --
 
 void setup() {
-  w.attach(6,7,11,2,3,10);
+  w.attach(2,3,5,6,7,11);
 
   pinMode(BEEPER, OUTPUT);
   Timer1.initialize();
   updateBeep(0);
 
-  pinMode(A0, INPUT);
-  pinMode(A1, INPUT);
+  pinMode(A0, INPUT_PULLUP);
+  pinMode(A1, INPUT_PULLUP);
   prevA0 = (PINC & (1 << PC0)) != 0;
   prevA1 = (PINC & (1 << PC1)) != 0;
   PCICR |= (1 << PCIE1);
@@ -167,28 +167,33 @@ void setup() {
 }
 
 void loop() {
-  while(Serial.available())
-  {
-    cmd = Serial.read();
-    switch(cmd)
-    {
-      case 'W': w.forward(); break;
-      case 'X': w.back(); break;
-      case 'A': w.forwardLeft(); break;
-      case 'D': w.forwardRight(); break;
-      case 'Z': w.backLeft(); break;
-      case 'C': w.backRight(); break;
-      case 'S': w.stop(); break;
-      case '1': w.setSpeedLeft(75); break;
-      case '2': w.setSpeedLeft(150); break;
-      case '3': w.setSpeedLeft(225); break;
-      case '8': w.setSpeedRight(75); break;
-      case '9': w.setSpeedRight(150); break;
-      case '0': w.setSpeedRight(225); break;
-      case '5': w.setSpeed(150); break;
-      case 'F': { int cm = Serial.parseInt(); w.goForward(cm); break; }
-      case 'B': { int cm = Serial.parseInt(); w.goBack(cm); break; }
-      case 'T': { int cm = Serial.parseInt(); w.goForward(cm); w.turn(360); w.goBack(cm); break; }
-    }
-  }
+  w.goForward(100);
+  delay(3000);
+  w.goBack(100);
+  delay(3000);
+
+  // while(Serial.available())
+  // {
+  //   cmd = Serial.read();
+  //   switch(cmd)
+  //   {
+  //     case 'W': w.forward(); break;
+  //     case 'X': w.back(); break;
+  //     case 'A': w.forwardLeft(); break;
+  //     case 'D': w.forwardRight(); break;
+  //     case 'Z': w.backLeft(); break;
+  //     case 'C': w.backRight(); break;
+  //     case 'S': w.stop(); break;
+  //     case '1': w.setSpeedLeft(75); break;
+  //     case '2': w.setSpeedLeft(150); break;
+  //     case '3': w.setSpeedLeft(225); break;
+  //     case '8': w.setSpeedRight(75); break;
+  //     case '9': w.setSpeedRight(150); break;
+  //     case '0': w.setSpeedRight(225); break;
+  //     case '5': w.setSpeed(150); break;
+  //     case 'F': { int cm = Serial.parseInt(); w.goForward(cm); break; }
+  //     case 'B': { int cm = Serial.parseInt(); w.goBack(cm); break; }
+  //     case 'T': { int cm = Serial.parseInt(); w.goForward(cm); w.turn(360); w.goBack(cm); break; }
+  //   }
+  // }
 }

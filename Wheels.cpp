@@ -53,7 +53,7 @@ void Wheels::configureWheels(
     BeepCallback updateBeepCallback,    // Function for updating the beep frequency
     float wheelDiameter,                // Wheel diameter (in cm)
     uint8_t slotCount,                  // Number of slots on the wheel
-    float wheelSpacing
+    float wheelSpacing                  // Gap between the wheels
 ) {
     this->defaultSpeed = defaultSpeed;
     this->updateLCD = updateLCDCallback;
@@ -234,11 +234,11 @@ void Wheels::goForward(int cm) {
         left = this->leftImpulseCount;
         right = this->rightImpulseCount;
         interrupts();
-        long average = (left + right) / 2;
-        if (average >= impusleTarget) break;
+        long minImpulseCount = (left < right) ? left : right;
+        if (minImpulseCount >= impusleTarget) break;
         unsigned long now = millis();
         if (now - stepLCD >= this->frequencyLCD) {
-            float distance = average * impulseRatio;
+            float distance = minImpulseCount * impulseRatio;
             int remaining = (int)(cm - distance + 0.999f);
             if (remaining < 0) remaining = 0;
             this->updateLCD(this->motion, remaining);
@@ -280,12 +280,13 @@ void Wheels::goBack(int cm) {
         left = this->leftImpulseCount;
         right = this->rightImpulseCount;
         interrupts();
-        long average = (left + right) / 2;
-        if (average >= impusleTarget) break;
+        long minImpulseCount = (left < right) ? left : right;
+        if (minImpulseCount >= impusleTarget) break;
+
         unsigned long now = millis();
         if (now - stepLCD >= this->frequencyLCD) {
-            float distance = average * impulseRatio;
-            int remaining = (int)(cm - distance + 0.999);
+            float distance = minImpulseCount * impulseRatio;
+            int remaining = (int)(cm - distance + 0.999f);
             if (remaining < 0) remaining = 0;
             this->updateLCD(this->motion, remaining);
             stepLCD = now;
@@ -327,8 +328,8 @@ void Wheels::turn(int deg) {
         left = this->leftImpulseCount;
         right = this->rightImpulseCount;
         interrupts();
-        long average = (left + right) / 2;
-        if (average >= impulseTarget) break;
+        long minImpulseCount = (left < right) ? left : right;
+        if (minImpulseCount >= impulseTarget) break;
     }
     this->stop();
 }
