@@ -5,7 +5,7 @@
                                digitalWrite( side[1], b)
 
 Wheels::Wheels() 
-    : motion{'S', 0, 0, 0, 0}, // {stop, lspeed 0, rspeed 0, ldir 0 (stop), rdir 0}
+    : motion{'S', 0, 0, 0, 0},
       defaultSpeed(0),
       updateLCD(nullptr),
       frequencyLCD(0),
@@ -17,9 +17,6 @@ Wheels::Wheels()
       rightImpulseCount(0)
 { }
 
-// -- CONFIG functions --
-
-// Attaches pin configuration for the left axis (implemented initially).
 void Wheels::attachLeft(uint8_t pF, uint8_t pB, uint8_t pS) {
     pinMode(pF, OUTPUT);
     pinMode(pB, OUTPUT);
@@ -29,7 +26,6 @@ void Wheels::attachLeft(uint8_t pF, uint8_t pB, uint8_t pS) {
     this->pinsLeft[2] = pS;
 }
 
-// Attaches pin configuration for the right axis (implemented initially).
 void Wheels::attachRight(uint8_t pF, uint8_t pB, uint8_t pS) {
     pinMode(pF, OUTPUT);
     pinMode(pB, OUTPUT);
@@ -39,21 +35,19 @@ void Wheels::attachRight(uint8_t pF, uint8_t pB, uint8_t pS) {
     this->pinsRight[2] = pS;
 }
 
-// Attaches pin configuration for both axles (implemented initially).
 void Wheels::attach(uint8_t pRF, uint8_t pRB, uint8_t pRS, uint8_t pLF, uint8_t pLB, uint8_t pLS) {
     this->attachRight(pRF, pRB, pRS);
     this->attachLeft(pLF, pLB, pLS);
 }
 
-// Configures all required variables and callbacks.
 void Wheels::configureWheels(
-    uint8_t defaultSpeed,               // Default speed value used in goForward, goBack, turn
-    LCDCallback updateLCDCallback,      // Function for updating the LCD (remaining cm display)
-    uint16_t freqLCD,                   // LCD update frequency constant (for goForward() & ...)
-    BeepCallback updateBeepCallback,    // Function for updating the beep frequency
-    float wheelDiameter,                // Wheel diameter (in cm)
-    uint8_t slotCount,                  // Number of slots on the wheel
-    float wheelSpacing                  // Gap between the wheels
+    uint8_t defaultSpeed,
+    MotionLCDCallback updateLCDCallback,
+    uint16_t freqLCD,
+    BeepCallback updateBeepCallback,
+    float wheelDiameter,
+    uint8_t slotCount,
+    float wheelSpacing
 ) {
     this->defaultSpeed = defaultSpeed;
     this->updateLCD = updateLCDCallback;
@@ -64,9 +58,6 @@ void Wheels::configureWheels(
     this->wheelSpacing = wheelSpacing;
 }
 
-// -- FORWARD functions --
-
-// Sets movement direction to forward for the left axis.
 void Wheels::forwardLeft() {
     SET_MOVEMENT(pinsLeft, HIGH, LOW);
     motion.leftDirection = 1;
@@ -74,7 +65,6 @@ void Wheels::forwardLeft() {
     if (this->updateLCD != nullptr) this->updateLCD(motion, -1);
 }
 
-// Sets movement direction to forward for the right axis.
 void Wheels::forwardRight() {
     SET_MOVEMENT(pinsRight, HIGH, LOW);
     motion.rightDirection = 1;
@@ -82,7 +72,6 @@ void Wheels::forwardRight() {
     if (this->updateLCD != nullptr) this->updateLCD(motion, -1);
 }
 
-// Sets movement direction to forward for both axles.
 void Wheels::forward() {
     SET_MOVEMENT(pinsLeft, HIGH, LOW);
     SET_MOVEMENT(pinsRight, HIGH, LOW);
@@ -92,9 +81,6 @@ void Wheels::forward() {
     if (this->updateLCD != nullptr) this->updateLCD(motion, -1);
 }
 
-// -- BACKWARD functions -- 
-
-// Sets movement direction to backward for the left axis.
 void Wheels::backLeft() {
     SET_MOVEMENT(pinsLeft, LOW, HIGH);
     motion.leftDirection = -1;
@@ -102,7 +88,6 @@ void Wheels::backLeft() {
     if (this->updateLCD != nullptr) this->updateLCD(motion, -1);
 }
 
-// Sets movement direction to backward for the right axis.
 void Wheels::backRight() {
     SET_MOVEMENT(pinsRight, LOW, HIGH);
     motion.rightDirection = -1;
@@ -110,7 +95,6 @@ void Wheels::backRight() {
     if (this->updateLCD != nullptr) this->updateLCD(motion, -1);
 }
 
-// Sets movement direction to backward for both axles.
 void Wheels::back() {
     SET_MOVEMENT(pinsLeft, LOW, HIGH);
     SET_MOVEMENT(pinsRight, LOW, HIGH);
@@ -120,9 +104,6 @@ void Wheels::back() {
     if (this->updateLCD != nullptr) this->updateLCD(motion, -1);
 }
 
-// -- STOP functions --
-
-// Stops left axis.
 void Wheels::stopLeft() {
     SET_MOVEMENT(pinsLeft, LOW, LOW);
     motion.leftDirection = 0;
@@ -130,7 +111,6 @@ void Wheels::stopLeft() {
     if (this->updateLCD != nullptr) this->updateLCD(motion, -1);
 }
 
-// Stops right axis.
 void Wheels::stopRight() {
     SET_MOVEMENT(pinsRight, LOW, LOW);
     motion.rightDirection = 0;
@@ -138,7 +118,6 @@ void Wheels::stopRight() {
     if (this->updateLCD != nullptr) this->updateLCD(motion, -1);
 }
 
-// Stops both axles.
 void Wheels::stop() {
     SET_MOVEMENT(pinsLeft, LOW, LOW);
     SET_MOVEMENT(pinsRight, LOW, LOW);
@@ -148,9 +127,6 @@ void Wheels::stop() {
     if (this->updateLCD != nullptr) this->updateLCD(motion, -1);
 }
 
-// -- SPEED functions --
-
-// Sets speed for the left axis.
 void Wheels::setSpeedLeft(uint8_t s) {
     motion.leftSpeed = s;
     updateMode();
@@ -158,7 +134,6 @@ void Wheels::setSpeedLeft(uint8_t s) {
     analogWrite(this->pinsLeft[2], s);
 }
 
-// Sets speed for the right axis.
 void Wheels::setSpeedRight(uint8_t s) {
     motion.rightSpeed = s;
     updateMode();
@@ -166,7 +141,6 @@ void Wheels::setSpeedRight(uint8_t s) {
     analogWrite(this->pinsRight[2], s);
 }
 
-// Sets speed for both axles.
 void Wheels::setSpeed(uint8_t s) {
     motion.leftSpeed = s;
     motion.rightSpeed = s;
@@ -176,37 +150,6 @@ void Wheels::setSpeed(uint8_t s) {
     analogWrite(this->pinsRight[2], s);
 }
 
-/* 
- * -- LAB 2 and future --
- *
- * goForward and goBack functions are used to move the car 
- * in the certain direction by a given distance (in cm).
- * 
- * Initially, they made use of the delay() function, but this
- * had to be changed because of the constant updating of the LCD data
- * required for LAB 3. Now they use callback functions implemented
- * in the lab2_wheelsBasic.ino file, which are attached in attachCallbacks().
- * These callbacks include upadating the LCD and changing the beep interval.
- * 
- * turn() function is used to rotate the car by given degree. 
- * 
- * Handles both ways of rotation, left and right. For the rotation itself,
- * the previous speed settings are saved, and temporarilly are set different,
- * constant speed values for each axis. After completing the movement action, 
- * initial settings are restored.
- */
-
-/*
- * Moves the car forward by given distance.
- * LAB 2: uses delay(cm * ms_per_cm) to determine how long will it take for the
- * car to move given distance.
- * LAB 3: uses the same idea, but instead of delay(), uses millis() function to keep
- * track of the time passed from the start of the movement, while constantly sending data
- * for the LCD to display (remaining cm) using right callback function.
- * LAB 4: makes use of the impulse counting from the slot sensors installed on each wheel 
- * axles (left & right), to calculate the speed accurately and based on that, determine 
- * traveled distance.
- */
 void Wheels::goForward(int cm) {
     if (
         cm <= 0 || 
@@ -216,15 +159,12 @@ void Wheels::goForward(int cm) {
         this->wheelDiameter == 0.0 || 
         this->slotCount == 0
     ) return;
-
     const float impulseRatio = (PI * this->wheelDiameter) / this->slotCount;
     const long impusleTarget = (cm / impulseRatio) + 0.5;
-
     noInterrupts();
     this->leftImpulseCount = 0;
     this->rightImpulseCount = 0;
     interrupts();
-
     this->setSpeed(this->defaultSpeed);
     this->forward();
     unsigned long stepLCD = 0;
@@ -249,10 +189,6 @@ void Wheels::goForward(int cm) {
     this->updateLCD(this->motion, 0);
 }
 
-/*
- * Moves the car backward by given distance.
- * LAB 2, 3, 4: similar to goForward function.
- */
 void Wheels::goBack(int cm) {
     if (
         cm <= 0 || 
@@ -262,15 +198,12 @@ void Wheels::goBack(int cm) {
         this->wheelDiameter == 0.0 || 
         this->slotCount == 0
     ) return;
-
     const float impulseRatio = (PI * this->wheelDiameter) / (float)this->slotCount;
     const long impusleTarget = (cm / impulseRatio) + 0.5;
-
     noInterrupts();
     this->leftImpulseCount = 0;
     this->rightImpulseCount = 0;
     interrupts();
-
     this->setSpeed(this->defaultSpeed);
     this->back();
     unsigned long stepLCD = 0;
@@ -282,7 +215,6 @@ void Wheels::goBack(int cm) {
         interrupts();
         long minImpulseCount = (left < right) ? left : right;
         if (minImpulseCount >= impusleTarget) break;
-
         unsigned long now = millis();
         if (now - stepLCD >= this->frequencyLCD) {
             float distance = minImpulseCount * impulseRatio;
@@ -295,7 +227,6 @@ void Wheels::goBack(int cm) {
     this->stop();
 }
 
-// Turns the car by a given degree.
 void Wheels::turn(int deg) {
     if (
         deg == 0 || 
@@ -304,21 +235,18 @@ void Wheels::turn(int deg) {
         this->wheelDiameter == 0.0 || 
         this->wheelSpacing == 0.0
     ) return;
-
     const float impulseRatio = (PI * this->wheelDiameter) / (float)this->slotCount;
     const float turnDistance = PI * this->wheelSpacing * (abs(deg) / 360.0);
     const long impulseTarget = (long)(turnDistance / impulseRatio + 0.5);
-
     noInterrupts();
     this->leftImpulseCount = 0;
     this->rightImpulseCount = 0;
     interrupts();
-
     this->setSpeed(this->defaultSpeed);
-    if (deg > 0) {  // Turn right
+    if (deg > 0) {
         this->forwardLeft();
         this->backRight();
-    } else {  // Turn left
+    } else {
         this->backLeft();
         this->forwardRight();
     }
@@ -334,8 +262,6 @@ void Wheels::turn(int deg) {
     this->stop();
 }
 
-// -- IMPULSE COUNTERS functions --
-
 void Wheels::leftImpulse() {
     this->leftImpulseCount++;
 }
@@ -344,33 +270,24 @@ void Wheels::rightImpulse() {
     this->rightImpulseCount++;
 }
 
-// -- MOTION STATE functions --
-
-/*
- * After every movement settings change, sets new movement mode (if required).
- * Initializes beeping action, when the car is moving backwards (backward turning included),
- * calculates frequency based on the average speed.
- */
 void Wheels::updateMode() {
     int vL = motion.leftDirection * motion.leftSpeed;
     int vR = motion.rightDirection * motion.rightSpeed;
-
     if (vL == 0 && vR == 0) {
-        motion.mode = 'S';  // Stop
+        motion.mode = 'S';
     } else if (vL != vR) {
-        motion.mode = 'T';  // Turning
+        motion.mode = 'T';
     } else if (vL == vR && vL > 0) {
-        motion.mode = 'F';  // Forward
+        motion.mode = 'F';
     } else {
-        motion.mode = 'B';  // Backward
+        motion.mode = 'B';
     }
-
     if (updateBeep != nullptr) {
-        if (vL + vR < 0) {  // If moving backwards, start beeping (backward turning included).
+        if (vL + vR < 0) {
             uint8_t beepFreq = (((motion.leftSpeed + motion.rightSpeed) / 2) + 74) / 75;
             if (beepFreq > 4) beepFreq = 4;
             this->updateBeep(beepFreq);
-        } else {  // Stop beeping otherwise.
+        } else {
             this->updateBeep(0);
         }
     }
