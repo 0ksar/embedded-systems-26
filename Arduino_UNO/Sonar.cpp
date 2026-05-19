@@ -38,12 +38,13 @@ SonarState Sonar::checkDistance(uint8_t angle) {
     unsigned int dist;
     state.angle = angle;
     servo.write(angle);
-    delay(10);
+    delay(200);
     digitalWrite(this->_pinTrig, LOW);
     delayMicroseconds(2);
     digitalWrite(this->_pinTrig, HIGH);
     delayMicroseconds(10);
     digitalWrite(this->_pinTrig, LOW);
+    delay(100);
     tot = pulseIn(this->_pinEcho, HIGH);
     dist = tot / 58;
     state.distance = dist;

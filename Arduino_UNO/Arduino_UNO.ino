@@ -17,18 +17,19 @@ const uint8_t DEF_SPEED = 250;
 const uint16_t LCD_FREQ = 500;
 const bool ANIMATE = false;
 const unsigned long BEEP_PERIOD = 500000;
+const bool USE_BEEPER_TIMER = false;
 
-const float WHEEL_DIAM = 6;
-const uint8_t SLOT_CNT = 8;
-const float WHEEL_SPAC = 18.28;
+const float WHEEL_DIAM = 6.46;
+const uint8_t SLOT_CNT = 18;
+const float WHEEL_SPAC = 24.37;
 
 // Range 0 - 180
-const uint8_t SONAR_FAST_LEFT = 60;
+const uint8_t SONAR_FAST_LEFT = 45;
 const uint8_t SONAR_FAST_CENTER = 90;
-const uint8_t SONAR_FAST_RIGHT = 120;
+const uint8_t SONAR_FAST_RIGHT = 135;
 
-const uint16_t SONAR_FREQ = 500;
-const unsigned int OBSTACLE_MIN_DIST = 40;
+const uint16_t SONAR_FREQ = 200;
+const unsigned int OBSTACLE_MIN_DIST = 60;
 
 unsigned long animationStep = 0;
 uint8_t beepFreqPrev = -1;
@@ -93,7 +94,7 @@ void updateSonarLCD(const SonarState& state) {
 }
 
 void updateBeep(uint8_t frequency) {
-  if (beepFreqPrev == frequency) return;
+  if (beepFreqPrev == frequency || !USE_BEEPER_TIMER) return;
   beepFreqPrev = frequency;
   Timer1.detachInterrupt();
   if (frequency == 0) {
@@ -117,21 +118,43 @@ ISR(PCINT1_vect) {
   prevA1 = a1;
 }
 
+unsigned int distanceMedian(uint8_t angle) {
+    const uint8_t N = 3;
+    unsigned int distances[N];
+    for (uint8_t i = 0; i < N; ++i) { distances[i] = s.checkDistance(angle).distance; }
+    if (distances[0] > distances[1]) {
+        unsigned int t = distances[0];
+        distances[0] = distances[1];
+        distances[1] = t;
+    }
+    if (distances[1] > distances[2]) {
+        unsigned int t = distances[1];
+        distances[1] = distances[2];
+        distances[2] = t;
+    }
+    if (distances[0] > distances[1]) {
+        unsigned int t = distances[0];
+        distances[0] = distances[1];
+        distances[1] = t;
+    }
+    return distances[1];
+}
+
 void sonarFastScan(uint8_t leftAngle, uint8_t centerAngle, uint8_t rightAngle) {
   ObstacleState res = s.fastScan(leftAngle, centerAngle, rightAngle, OBSTACLE_MIN_DIST);
   if (!res.detected) return;
   w.stop();
-  SonarState newState;
+  unsigned int distance;
   switch (res.side) {
     case ObstacleSide::Center:
-      newState = s.checkDistance(leftAngle);
-      if (newState.distance >= OBSTACLE_MIN_DIST) {
+      distance = distanceMedian(leftAngle);
+      if (distance >= OBSTACLE_MIN_DIST) {
         w.turn(leftAngle - 90);
         delay(100);
         break;
       }
-      newState = s.checkDistance(rightAngle);
-      if (newState.distance >= OBSTACLE_MIN_DIST) {
+      distance = distanceMedian(rightAngle);
+      if (distance >= OBSTACLE_MIN_DIST) {
         w.turn(rightAngle - 90);
         delay(100);
         break;
@@ -140,17 +163,17 @@ void sonarFastScan(uint8_t leftAngle, uint8_t centerAngle, uint8_t rightAngle) {
       w.turn(180);
       delay(100);
       turning = false;
-      sonarFullScan(0, 180, 30);
+      sonarFullScan(0, 180, 20);
       break;
     case ObstacleSide::Left:
-      newState = s.checkDistance(rightAngle);
-      if (newState.distance >= OBSTACLE_MIN_DIST) {
+      distance = distanceMedian(rightAngle);
+      if (distance >= OBSTACLE_MIN_DIST) {
         w.turn(rightAngle - 90);
         delay(100);
         break;
       }
-      newState = s.checkDistance(centerAngle);
-      if (newState.distance >= OBSTACLE_MIN_DIST) {
+      distance = distanceMedian(centerAngle);
+      if (distance >= OBSTACLE_MIN_DIST) {
         w.turn((rightAngle - 90) / 2);
         delay(100);
         break;
@@ -159,17 +182,17 @@ void sonarFastScan(uint8_t leftAngle, uint8_t centerAngle, uint8_t rightAngle) {
       w.turn(180);
       delay(100);
       turning = false;
-      sonarFullScan(0, 180, 30);
+      sonarFullScan(0, 180, 20);
       break;
     case ObstacleSide::Right:
-      newState = s.checkDistance(leftAngle);
-      if (newState.distance >= OBSTACLE_MIN_DIST) {
+      distance = distanceMedian(leftAngle);
+      if (distance >= OBSTACLE_MIN_DIST) {
         w.turn(leftAngle - 90);
         delay(100);
         break;
       }
-      newState = s.checkDistance(centerAngle);
-      if (newState.distance >= OBSTACLE_MIN_DIST) {
+      distance = distanceMedian(centerAngle);
+      if (distance >= OBSTACLE_MIN_DIST) {
         w.turn((leftAngle - 90) / 2);
         delay(100);
         break;
@@ -178,7 +201,7 @@ void sonarFastScan(uint8_t leftAngle, uint8_t centerAngle, uint8_t rightAngle) {
       w.turn(-180);
       delay(100);
       turning = false;
-      sonarFullScan(0, 180, 30);
+      sonarFullScan(0, 180, 20);
       break;
     default:
       break;
@@ -202,7 +225,7 @@ void sonarFullScan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle) {
   for (uint8_t i = 0; i < count; ++i) {
     uint8_t angle = distances[i].angle;
     unsigned int distance = distances[i].distance;
-    if (distance < bestDistance) {
+    if (distance > bestDistance) {
       bestAngle = angle;
       bestDistance = distance;
     }
@@ -216,7 +239,7 @@ void sonarFullScan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle) {
     w.turn(bestAngle - 90 >= 0 ? 90 : -90);
     delay(100);
     turning = false;
-    sonarFullScan(0, 180, 30);
+    sonarFullScan(0, 180, 20);
   }
 }
 
@@ -225,7 +248,7 @@ void setup() {
   s.attach(3, A3, A2);
 
   pinMode(BEEPER, OUTPUT);
-  Timer1.initialize();
+  if (USE_BEEPER_TIMER) Timer1.initialize();
   updateBeep(0);
 
   pinMode(A0, INPUT_PULLUP);
