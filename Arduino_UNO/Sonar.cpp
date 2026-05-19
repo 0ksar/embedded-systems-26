@@ -28,8 +28,9 @@ void Sonar::attach(uint8_t pinServo, uint8_t pinTrig, uint8_t pinEcho) {
     delay(100);
 }
 
-void Sonar::configureSonar(SonarLCDCallback updateLCDCallback) {
+void Sonar::configureSonar(SonarLCDCallback updateLCDCallback, unsigned int maxDist) {
     this->updateLCD = updateLCDCallback;
+    this->maxDistance = maxDist;
 }
 
 SonarState Sonar::checkDistance(uint8_t angle) {
@@ -45,8 +46,13 @@ SonarState Sonar::checkDistance(uint8_t angle) {
     delayMicroseconds(10);
     digitalWrite(this->_pinTrig, LOW);
     delay(100);
-    tot = pulseIn(this->_pinEcho, HIGH);
-    dist = tot / 58;
+    tot = pulseIn(this->_pinEcho, HIGH, 30000);
+    if (tot == 0) {
+        dist = this->maxDistance;
+    } else {
+        dist = tot / 58;
+        if (dist > this->maxDistance) dist = this->maxDistance;
+    }
     state.distance = dist;
     return state;
 }

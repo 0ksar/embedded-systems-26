@@ -21,7 +21,7 @@ class Sonar {
         Sonar();
         ~Sonar();
         void attach(uint8_t pinServo, uint8_t pinTrig, uint8_t pinEcho);
-        void configureSonar(SonarLCDCallback updateLCDCallback);
+        void configureSonar(SonarLCDCallback updateLCDCallback, unsigned int maxDist);
         SonarState checkDistance(uint8_t angle);
         ObstacleState fastScan(
             uint8_t startAngle,
@@ -41,6 +41,7 @@ class Sonar {
         SonarState *allDist;
         size_t allDistCount;
         SonarLCDCallback updateLCD;
+        unsigned int maxDistance;
 };
 
 #endif

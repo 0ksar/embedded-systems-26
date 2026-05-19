@@ -30,6 +30,7 @@ const uint8_t SONAR_FAST_RIGHT = 135;
 
 const uint16_t SONAR_FREQ = 200;
 const unsigned int OBSTACLE_MIN_DIST = 60;
+const unsigned int MAX_VALID_DIST = 400;
 
 unsigned long animationStep = 0;
 uint8_t beepFreqPrev = -1;
@@ -121,7 +122,10 @@ ISR(PCINT1_vect) {
 unsigned int distanceMedian(uint8_t angle) {
     const uint8_t N = 3;
     unsigned int distances[N];
-    for (uint8_t i = 0; i < N; ++i) { distances[i] = s.checkDistance(angle).distance; }
+    for (uint8_t i = 0; i < N; ++i) { 
+      distances[i] = s.checkDistance(angle).distance;
+      if (distances[i] == 0 || distances[i] > MAX_VALID_DIST) distances[i] = MAX_VALID_DIST;
+    }
     if (distances[0] > distances[1]) {
         unsigned int t = distances[0];
         distances[0] = distances[1];
@@ -275,7 +279,8 @@ void setup() {
   );
 
   s.configureSonar(
-    updateSonarLCD
+    updateSonarLCD,
+    MAX_VALID_DIST
   );
 
   w.setSpeed(CRUISE_SPEED);
