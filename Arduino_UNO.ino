@@ -13,17 +13,22 @@ Sonar s;
 
 const uint8_t CRUISE_SPEED = 150;
 const uint8_t DEF_SPEED = 250;
+
 const uint16_t LCD_FREQ = 500;
 const bool ANIMATE = false;
 const unsigned long BEEP_PERIOD = 500000;
+
 const float WHEEL_DIAM = 6;
 const uint8_t SLOT_CNT = 8;
 const float WHEEL_SPAC = 18.28;
-const uint8_t SONAR_LEFT_ANGLE = 60;
-const uint8_t SONAR_RIGHT_ANGLE = 120;
-const uint8_t SONAR_STEPANGLE = 30;
-const uint16_t SONAR_FREQ = 200;
-const unsigned int OBSTACLE_MIN_DIST = 50;
+
+// Range 0 - 180
+const uint8_t SONAR_FAST_LEFT = 60;
+const uint8_t SONAR_FAST_CENTER = 90;
+const uint8_t SONAR_FAST_RIGHT = 120;
+
+const uint16_t SONAR_FREQ = 500;
+const unsigned int OBSTACLE_MIN_DIST = 40;
 
 unsigned long animationStep = 0;
 uint8_t beepFreqPrev = -1;
@@ -112,9 +117,79 @@ ISR(PCINT1_vect) {
   prevA1 = a1;
 }
 
-void sonarScan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle) {
+void sonarFastScan(uint8_t leftAngle, uint8_t centerAngle, uint8_t rightAngle) {
+  ObstacleState res = s.fastScan(leftAngle, centerAngle, rightAngle, OBSTACLE_MIN_DIST);
+  if (!res.detected) return;
+  w.stop();
+  SonarState newState;
+  switch (res.side) {
+    case ObstacleSide::Center:
+      newState = s.checkDistance(leftAngle);
+      if (newState.distance >= OBSTACLE_MIN_DIST) {
+        w.turn(leftAngle - 90);
+        delay(100);
+        break;
+      }
+      newState = s.checkDistance(rightAngle);
+      if (newState.distance >= OBSTACLE_MIN_DIST) {
+        w.turn(rightAngle - 90);
+        delay(100);
+        break;
+      }
+      turning = true;
+      w.turn(180);
+      delay(100);
+      turning = false;
+      sonarFullScan(0, 180, 30);
+      break;
+    case ObstacleSide::Left:
+      newState = s.checkDistance(rightAngle);
+      if (newState.distance >= OBSTACLE_MIN_DIST) {
+        w.turn(rightAngle - 90);
+        delay(100);
+        break;
+      }
+      newState = s.checkDistance(centerAngle);
+      if (newState.distance >= OBSTACLE_MIN_DIST) {
+        w.turn((rightAngle - 90) / 2);
+        delay(100);
+        break;
+      }
+      turning = true;
+      w.turn(180);
+      delay(100);
+      turning = false;
+      sonarFullScan(0, 180, 30);
+      break;
+    case ObstacleSide::Right:
+      newState = s.checkDistance(leftAngle);
+      if (newState.distance >= OBSTACLE_MIN_DIST) {
+        w.turn(leftAngle - 90);
+        delay(100);
+        break;
+      }
+      newState = s.checkDistance(centerAngle);
+      if (newState.distance >= OBSTACLE_MIN_DIST) {
+        w.turn((leftAngle - 90) / 2);
+        delay(100);
+        break;
+      }
+      turning = true;
+      w.turn(-180);
+      delay(100);
+      turning = false;
+      sonarFullScan(0, 180, 30);
+      break;
+    default:
+      break;
+  }
+  w.setSpeed(CRUISE_SPEED);
+  w.forward();
+}
+
+void sonarFullScan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle) {
   if (turning) return;
-  SonarState *distances = s.scan(startAngle, stopAngle, stepAngle);
+  SonarState *distances = s.fullScan(startAngle, stopAngle, stepAngle);
   uint8_t count = (stepAngle == 0 || stopAngle < startAngle)
     ? 0
     : ((stopAngle - startAngle) / stepAngle) + 1;
@@ -124,32 +199,24 @@ void sonarScan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle) {
   }
   uint8_t bestAngle = distances[0].angle;
   unsigned int bestDistance = distances[0].distance;
-  bool obstacleDetected = false;
   for (uint8_t i = 0; i < count; ++i) {
     uint8_t angle = distances[i].angle;
     unsigned int distance = distances[i].distance;
-    if (distance < OBSTACLE_MIN_DIST) obstacleDetected = true;
     if (distance < bestDistance) {
       bestAngle = angle;
       bestDistance = distance;
     }
   }
   delete[] distances;
-  if (obstacleDetected) {
-    w.stop();
-    delay(50);
-    if (bestDistance > OBSTACLE_MIN_DIST) {
-      w.turn(bestAngle - 90);
-      delay(100);
-    } else {
-      turning = true;
-      w.turn(bestAngle - 90 >= 0 ? 90 : -90);
-      delay(100);
-      turning = false;
-      sonarScan(0, 180, 20);
-    }
-    w.setSpeed(CRUISE_SPEED);
-    w.forward();
+  if (bestDistance > OBSTACLE_MIN_DIST) {
+    w.turn(bestAngle - 90);
+    delay(100);
+  } else {
+    turning = true;
+    w.turn(bestAngle - 90 >= 0 ? 90 : -90);
+    delay(100);
+    turning = false;
+    sonarFullScan(0, 180, 30);
   }
 }
 
@@ -195,7 +262,7 @@ void setup() {
 
 void loop() {
   if (!turning && (millis() - scanStep >= SONAR_FREQ)) {
-    sonarScan(SONAR_LEFT_ANGLE, SONAR_RIGHT_ANGLE, SONAR_STEPANGLE);
+    sonarFastScan(SONAR_FAST_LEFT, SONAR_FAST_CENTER, SONAR_FAST_RIGHT);
     scanStep = millis();
   }
 }

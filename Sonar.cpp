@@ -32,9 +32,44 @@ void Sonar::configureSonar(SonarLCDCallback updateLCDCallback) {
     this->updateLCD = updateLCDCallback;
 }
 
-SonarState* Sonar::scan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle) {
+SonarState Sonar::checkDistance(uint8_t angle) {
+    SonarState state;
     unsigned long tot;
     unsigned int dist;
+    state.angle = angle;
+    servo.write(angle);
+    delay(10);
+    digitalWrite(this->_pinTrig, LOW);
+    delayMicroseconds(2);
+    digitalWrite(this->_pinTrig, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(this->_pinTrig, LOW);
+    tot = pulseIn(this->_pinEcho, HIGH);
+    dist = tot / 58;
+    state.distance = dist;
+    return state;
+}
+
+ObstacleState Sonar::fastScan(
+    uint8_t leftAngle, 
+    uint8_t centerAngle, 
+    uint8_t rightAngle, 
+    unsigned int obstacleDist
+) {
+    SonarState state;
+    state = checkDistance(leftAngle);
+    if (this->updateLCD) this->updateLCD(state);
+    if (state.distance < obstacleDist) return { true, ObstacleSide::Left};
+    state = checkDistance(rightAngle);
+    if (this->updateLCD) this->updateLCD(state);
+    if (state.distance < obstacleDist) return { true, ObstacleSide::Right};
+    state = checkDistance(centerAngle);
+    if (this->updateLCD) this->updateLCD(state);
+    if (state.distance < obstacleDist) return { true, ObstacleSide::Center};
+    return { false, ObstacleSide::None};
+}
+
+SonarState* Sonar::fullScan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle) {
     SonarState state;
     size_t cnt;
     if (stepAngle == 0 || startAngle > stopAngle) cnt = 0;
@@ -43,19 +78,8 @@ SonarState* Sonar::scan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle
     SonarState *res = new SonarState[cnt];
     if (!res) return nullptr;
     size_t idx = 0;
-    for (
-        uint8_t angle = startAngle; 
-        angle <= stopAngle;
-        angle += stepAngle, ++idx
-    ) {
-        state.angle = angle;
-        servo.write(angle);
-        digitalWrite(this->_pinTrig, HIGH);
-        delay(10);
-        digitalWrite(this->_pinTrig, LOW);
-        tot = pulseIn(this->_pinEcho, HIGH);
-        dist = tot / 58;
-        state.distance = dist;
+    for (uint8_t angle = startAngle; angle <= stopAngle;angle += stepAngle, ++idx) {
+        state = checkDistance(angle);
         if (this->updateLCD) this->updateLCD(state);
         res[idx] = state;
     }

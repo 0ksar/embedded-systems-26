@@ -8,8 +8,13 @@ struct SonarState {
     unsigned int distance;
 };
 
+enum class ObstacleSide { None, Left, Center, Right };
+struct ObstacleState {
+    bool detected;
+    ObstacleSide side;
+};
+
 typedef void (*SonarLCDCallback)(const SonarState& state);
-typedef void (*SonarObstacleCallback)(const uint8_t turn_angle);
 
 class Sonar {
     public:
@@ -17,7 +22,18 @@ class Sonar {
         ~Sonar();
         void attach(uint8_t pinServo, uint8_t pinTrig, uint8_t pinEcho);
         void configureSonar(SonarLCDCallback updateLCDCallback);
-        SonarState* scan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle);
+        SonarState checkDistance(uint8_t angle);
+        ObstacleState fastScan(
+            uint8_t startAngle,
+            uint8_t stopAngle,
+            uint8_t stepAngle,
+            unsigned int obstacleDistance
+        );
+        SonarState* fullScan(
+            uint8_t startAngle,
+            uint8_t stopAngle,
+            uint8_t stepAngle
+        );
 
     private:
         uint8_t _pinServo, _pinTrig, _pinEcho;
@@ -25,7 +41,6 @@ class Sonar {
         SonarState *allDist;
         size_t allDistCount;
         SonarLCDCallback updateLCD;
-        SonarObstacleCallback reportObstacle;
 };
 
 #endif
