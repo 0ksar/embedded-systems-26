@@ -1,6 +1,8 @@
 #include "Wheels.h"
 #include "Sonar.h"
+#include "Remote.h"
 #include <LiquidCrystal_I2C.h>
+#include <IRremote.hpp>
 #include "TimerOne.h"
 
 byte LCDAddress = 0x27;
@@ -10,6 +12,7 @@ LiquidCrystal_I2C lcd(LCDAddress, 16, 2);
 
 Wheels w;
 Sonar s;
+Remote r;
 
 const uint8_t CRUISE_SPEED = 150;
 const uint8_t DEF_SPEED = 250;
@@ -28,9 +31,22 @@ const uint8_t SONAR_FAST_LEFT = 45;
 const uint8_t SONAR_FAST_CENTER = 90;
 const uint8_t SONAR_FAST_RIGHT = 135;
 
+const uint8_t N = 3;
 const uint16_t SONAR_FREQ = 200;
 const unsigned int OBSTACLE_MIN_DIST = 60;
-const unsigned int MAX_VALID_DIST = 400;
+
+const uint16_t SPRING_FREQ = 100;  // [ms]
+const unsigned int SPRING_DIST = 1;  // [m]
+const uint8_t PWM_MIN = 70;
+const uint8_t PWM_MAX = 255;
+const float V_MAX = 0;  // TBD [m/s]
+const float M = 0;  // TBD [kg]
+const float K = 2.0;
+const float C = 1.0;
+
+const uint8_t IR_PIN = 8;
+const int PIN = 1234;
+RemoteMode mode = RemoteMode::Manual;
 
 unsigned long animationStep = 0;
 uint8_t beepFreqPrev = -1;
@@ -38,6 +54,9 @@ volatile uint8_t prevA0 = 0;
 volatile uint8_t prevA1 = 0;
 volatile bool turning = false;
 unsigned long scanStep = 0;
+float vPrev = 0;
+unsigned long tPrev = 0;
+float xPrev = 0;
 
 int getLength(int n) {
   if (n == 0) return 1;
@@ -60,8 +79,7 @@ void updateMotionLCD(const MotionState& state, int cm) {
   lcd.print(state.leftDirection < 0 ? "-" : "");
   lcd.print(state.leftSpeed);
   const char* animationText;
-  switch(state.mode)
-  {
+  switch(state.mode) {
     case 'F': animationText = "FRWD"; break;
     case 'B': animationText = "BACK"; break;
     case 'S': animationText = "STOP"; break;
@@ -88,10 +106,42 @@ void updateSonarLCD(const SonarState& state) {
   const int8_t fixedAngle = state.angle - 90;
   lcd.setCursor(0,0);
   lcd.print(fixedAngle);
-  lcd.print("*");
+  lcd.print(" dg");
   lcd.setCursor((11-getLength(state.distance)),0);
   lcd.print("dst: ");
   lcd.print(state.distance);
+}
+
+void updateRemoteLCD(const RemoteState& state) {
+  lcd.setCursor(0,0);
+  lcd.print("                ");
+  const char* actionText;
+  switch(state.action) {
+    case RemoteAction::Locked: actionText = "LOCK"; break;
+    case RemoteAction::None: actionText = "SLCT"; break;
+    case RemoteAction::Forward: actionText = "FRWD"; break;
+    case RemoteAction::TurnRight: actionText = "RTRN"; break;
+    case RemoteAction::Back: actionText = "BACK"; break;
+    case RemoteAction::TurnLeft: actionText = "LTRN"; break;
+    case RemoteAction::SonarTest: actionText = "SONR"; break;
+    case RemoteAction::SpringTest: actionText = "SPNG"; break;
+  }
+  lcd.setCursor(2,0);
+  lcd.print(actionText);
+  if (state.action == RemoteAction::None || 
+      state.action == RemoteAction::SonarTest ||
+      state.action == RemoteAction::SpringTest) {
+    return;
+  } else if (state.action == RemoteAction::Locked) {
+    if (state.value == 0) return;
+    lcd.setCursor((10+getLength(state.value)),0);
+    lcd.print(state.value);
+  } else {
+    lcd.setCursor((11-getLength(state.value)),0);
+    lcd.print(state.value);
+    if (state.action == RemoteAction::Forward || state.action == RemoteAction::Back) lcd.print(" cm");
+    if (state.action == RemoteAction::TurnRight || state.action == RemoteAction::TurnLeft) lcd.print(" dg");
+  }
 }
 
 void updateBeep(uint8_t frequency) {
@@ -119,31 +169,6 @@ ISR(PCINT1_vect) {
   prevA1 = a1;
 }
 
-unsigned int distanceMedian(uint8_t angle) {
-    const uint8_t N = 3;
-    unsigned int distances[N];
-    for (uint8_t i = 0; i < N; ++i) { 
-      distances[i] = s.checkDistance(angle).distance;
-      if (distances[i] == 0 || distances[i] > MAX_VALID_DIST) distances[i] = MAX_VALID_DIST;
-    }
-    if (distances[0] > distances[1]) {
-        unsigned int t = distances[0];
-        distances[0] = distances[1];
-        distances[1] = t;
-    }
-    if (distances[1] > distances[2]) {
-        unsigned int t = distances[1];
-        distances[1] = distances[2];
-        distances[2] = t;
-    }
-    if (distances[0] > distances[1]) {
-        unsigned int t = distances[0];
-        distances[0] = distances[1];
-        distances[1] = t;
-    }
-    return distances[1];
-}
-
 void sonarFastScan(uint8_t leftAngle, uint8_t centerAngle, uint8_t rightAngle) {
   ObstacleState res = s.fastScan(leftAngle, centerAngle, rightAngle, OBSTACLE_MIN_DIST);
   if (!res.detected) return;
@@ -151,13 +176,13 @@ void sonarFastScan(uint8_t leftAngle, uint8_t centerAngle, uint8_t rightAngle) {
   unsigned int distance;
   switch (res.side) {
     case ObstacleSide::Center:
-      distance = distanceMedian(leftAngle);
+      distance = s.checkDistance(leftAngle);
       if (distance >= OBSTACLE_MIN_DIST) {
         w.turn(leftAngle - 90);
         delay(100);
         break;
       }
-      distance = distanceMedian(rightAngle);
+      distance = s.checkDistance(rightAngle);
       if (distance >= OBSTACLE_MIN_DIST) {
         w.turn(rightAngle - 90);
         delay(100);
@@ -170,13 +195,13 @@ void sonarFastScan(uint8_t leftAngle, uint8_t centerAngle, uint8_t rightAngle) {
       sonarFullScan(0, 180, 20);
       break;
     case ObstacleSide::Left:
-      distance = distanceMedian(rightAngle);
+      distance = s.checkDistance(rightAngle);
       if (distance >= OBSTACLE_MIN_DIST) {
         w.turn(rightAngle - 90);
         delay(100);
         break;
       }
-      distance = distanceMedian(centerAngle);
+      distance = s.checkDistance(centerAngle);
       if (distance >= OBSTACLE_MIN_DIST) {
         w.turn((rightAngle - 90) / 2);
         delay(100);
@@ -189,13 +214,13 @@ void sonarFastScan(uint8_t leftAngle, uint8_t centerAngle, uint8_t rightAngle) {
       sonarFullScan(0, 180, 20);
       break;
     case ObstacleSide::Right:
-      distance = distanceMedian(leftAngle);
+      distance = s.checkDistance(leftAngle);
       if (distance >= OBSTACLE_MIN_DIST) {
         w.turn(leftAngle - 90);
         delay(100);
         break;
       }
-      distance = distanceMedian(centerAngle);
+      distance = s.checkDistance(centerAngle);
       if (distance >= OBSTACLE_MIN_DIST) {
         w.turn((leftAngle - 90) / 2);
         delay(100);
@@ -247,6 +272,83 @@ void sonarFullScan(uint8_t startAngle, uint8_t stopAngle, uint8_t stepAngle) {
   }
 }
 
+void performRemoteAction(const RemoteAction& state) {
+  switch(state.action) {
+    case RemoteAction::None: {
+      mode = RemoteMode::Manual;
+      turning = false;
+      w.stop();
+      break;
+    }
+    case RemoteAction::Forward: {
+      mode = RemoteMode::Manual;
+      w.goForward(state.value);
+      break;
+    }
+    case RemoteAction::TurnRight: {
+      mode = RemoteMode::Manual;
+      w.turn(state.value);
+      break;
+    }
+    case RemoteAction::Back: {
+      mode = RemoteMode::Manual;
+      w.goBack(state.value);
+      break;
+    }
+    case RemoteAction::TurnLeft: {
+      mode = RemoteMode::Manual;
+      w.turn(-state.value);
+      break;
+    }
+    case RemoteAction::SonarTest: {
+      mode = RemoteMode::Sonar;
+      turning = false;
+      scanStep = millis();
+      w.setSpeed(CRUISE_SPEED);
+      w.forward();
+      break;
+    }
+    case RemoteAction::SpringTest: {
+      mode = RemoteMode::Spring;
+      tPrev = millis();
+      xPrev = s.checkDistance(90).distance / 100.0f;
+      if (xPrev > 400) xPrev = 400;
+      break;
+    }
+  }
+}
+
+void spring() {
+  unsigned int x = s.checkDistance(90).distance / 100.0f;  // [m]
+  if (x <= 0 || x > 400) {
+    w.stop();
+    return;
+  }
+  unsigned long t = millis();
+  float dt = (t - tPrev) / 1000.0f;  // [s]
+  if (dt <= 0) dt = 0.001;
+  // F_s = k * (x - spring_dist)
+  // F_t = c * v_rel
+  // v_rel = dx / dt
+  // a = F_w / m
+  // F_w = F_s + F_t
+  float a = ((K * (x - SPRING_DIST)) + (C * ((x - xPrev) / dt))) / M;  // (F_s + F_t) / m
+  float v = vPrev + (a * dt);
+  float abs_v = fabs(v);
+  uint8_t new_pwm = 0;
+  if (abs_v > 0.5) {
+    new_pwm = PWM_MIN + ((PWM_MAX - PWM_MIN) / V_MAX) * abs_v;
+    if (new_pwm > PWM_MAX) new_pwm = PWM_MAX;
+    w.setSpeed(new_pwm);
+  }
+  if (v < 0) w.back();
+  else if (v > 0) w.forward();
+  else w.stop();
+  vPrev = v;
+  tPrev = t;
+  xPrev = x;
+}
+
 void setup() {
   w.attach(2,4,5,6,7,11);
   s.attach(3, A3, A2);
@@ -268,6 +370,8 @@ void setup() {
   lcd.init();
   lcd.backlight();
 
+  IrReceiver.begin(IR_PIN, ENABLE_LED_FEEDBACK);
+
   w.configureWheels(
     DEF_SPEED, 
     updateMotionLCD, 
@@ -279,18 +383,36 @@ void setup() {
   );
 
   s.configureSonar(
-    updateSonarLCD,
-    MAX_VALID_DIST
+    updateSonarLCD, 
+    N
   );
 
-  w.setSpeed(CRUISE_SPEED);
-  w.forward();
-  scanStep = millis();
+  r.configureRemote(
+    updateRemoteLCD,
+    performRemoteAction,
+    PIN
+  );
 }
 
 void loop() {
-  if (!turning && (millis() - scanStep >= SONAR_FREQ)) {
-    sonarFastScan(SONAR_FAST_LEFT, SONAR_FAST_CENTER, SONAR_FAST_RIGHT);
-    scanStep = millis();
+  if (IrReceiver.decode()) {
+    Serial.print("Code: ");
+    Serial.println(IrReceiver.decodedIRData.decodedRawData);
+    // r.updateAction(IrReceiver.decodedIRData.decodedRawData);
+    IrReceiver.resume();
+  }
+  switch(mode) {
+    case RemoteMode::Manual: break;
+    case RemoteMode::Sonar: {
+      if (!turning && (millis() - scanStep >= SONAR_FREQ)) {
+        sonarFastScan(SONAR_FAST_LEFT, SONAR_FAST_CENTER, SONAR_FAST_RIGHT);
+        scanStep = millis();
+      }
+      break;
+    }
+    case RemoteMode::Spring: {
+      if (millis() - tPrev >= SPRING_FREQ) spring();
+      break;
+    }
   }
 }

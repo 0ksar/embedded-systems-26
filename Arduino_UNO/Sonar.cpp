@@ -5,15 +5,8 @@ Servo servo;
 
 Sonar::Sonar()
     : updateLCD(nullptr),
-      allDist(nullptr),
-      allDistCount(0)
+      n_cnt(1)
 { }
-
-Sonar::~Sonar() {
-    delete[] allDist;
-    allDist = nullptr;
-    allDistCount = 0;
-}
 
 void Sonar::attach(uint8_t pinServo, uint8_t pinTrig, uint8_t pinEcho) {
     this->_pinServo = pinServo;
@@ -28,31 +21,44 @@ void Sonar::attach(uint8_t pinServo, uint8_t pinTrig, uint8_t pinEcho) {
     delay(100);
 }
 
-void Sonar::configureSonar(SonarLCDCallback updateLCDCallback, unsigned int maxDist) {
+void Sonar::configureSonar(SonarLCDCallback updateLCDCallback, uint8_t n) {
     this->updateLCD = updateLCDCallback;
-    this->maxDistance = maxDist;
+    this->n_cnt = n;
 }
 
 SonarState Sonar::checkDistance(uint8_t angle) {
     SonarState state;
     unsigned long tot;
     unsigned int dist;
+    unsigned int dists[this->n_cnt];
     state.angle = angle;
     servo.write(angle);
     delay(200);
-    digitalWrite(this->_pinTrig, LOW);
-    delayMicroseconds(2);
-    digitalWrite(this->_pinTrig, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(this->_pinTrig, LOW);
-    delay(100);
-    tot = pulseIn(this->_pinEcho, HIGH, 30000);
-    if (tot == 0) {
-        dist = this->maxDistance;
-    } else {
-        dist = tot / 58;
-        if (dist > this->maxDistance) dist = this->maxDistance;
+    for (uint8_t i = 0; i < this->n_cnt; ++i) {
+        digitalWrite(this->_pinTrig, LOW);
+        delayMicroseconds(2);
+        digitalWrite(this->_pinTrig, HIGH);
+        delayMicroseconds(10);
+        digitalWrite(this->_pinTrig, LOW);
+        tot = pulseIn(this->_pinEcho, HIGH, 30000);
+        dists[i] = tot / 58;
     }
+    if (dists[0] > dists[1]) {
+        unsigned int t = dists[0];
+        dists[0] = dists[1];
+        dists[1] = t;
+    }
+    if (dists[1] > dists[2]) {
+        unsigned int t = dists[1];
+        dists[1] = dists[2];
+        dists[2] = t;
+    }
+    if (dists[0] > dists[1]) {
+        unsigned int t = dists[0];
+        dists[0] = dists[1];
+        dists[1] = t;
+    }
+    dist = dists[1];
     state.distance = dist;
     return state;
 }
