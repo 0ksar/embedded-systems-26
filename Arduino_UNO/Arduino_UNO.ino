@@ -9,6 +9,7 @@ byte LCDAddress = 0x27;
 LiquidCrystal_I2C lcd(LCDAddress, 16, 2);
 
 #define BEEPER 13
+#define IR 8
 
 Wheels w;
 Sonar s;
@@ -35,16 +36,15 @@ const uint8_t N = 3;
 const uint16_t SONAR_FREQ = 200;
 const unsigned int OBSTACLE_MIN_DIST = 60;
 
-const uint16_t SPRING_FREQ = 100;  // [ms]
-const unsigned int SPRING_DIST = 1;  // [m]
-const uint8_t PWM_MIN = 70;
+const uint16_t SPRING_FREQ = 50;  // [ms]
+const float SPRING_DIST = 1.0f;  // [m]
+const uint8_t PWM_MIN = 60;
 const uint8_t PWM_MAX = 255;
-const float V_MAX = 0;  // TBD [m/s]
-const float M = 0;  // TBD [kg]
-const float K = 2.0;
-const float C = 1.0;
+const float V_MAX = 0.5;  // TBD [m/s]
+const float M = 1;  // TBD [kg]
+const float K = 1.0;
+const float C = 2.5;
 
-const uint8_t IR_PIN = 8;
 const int PIN = 1234;
 RemoteMode mode = RemoteMode::Manual;
 
@@ -312,7 +312,7 @@ void performRemoteAction(const RemoteAction& state) {
       mode = RemoteMode::Spring;
       tPrev = millis();
       xPrev = s.checkDistance(90).distance / 100.0f;
-      if (xPrev > 400) xPrev = 400;
+      if (xPrev > 4.0f) xPrev = 4.0f;
       break;
     }
   }
@@ -320,29 +320,30 @@ void performRemoteAction(const RemoteAction& state) {
 
 void spring() {
   unsigned int x = s.checkDistance(90).distance / 100.0f;  // [m]
-  if (x <= 0 || x > 400) {
+  if (x <= 0.05f || x > 4.0f) {
     w.stop();
     return;
   }
   unsigned long t = millis();
   float dt = (t - tPrev) / 1000.0f;  // [s]
-  if (dt <= 0) dt = 0.001;
-  // F_s = k * (x - spring_dist)
-  // F_t = c * v_rel
-  // v_rel = dx / dt
-  // a = F_w / m
-  // F_w = F_s + F_t
-  float a = ((K * (x - SPRING_DIST)) + (C * ((x - xPrev) / dt))) / M;  // (F_s + F_t) / m
+  if (dt <= 0.0f) dt = 0.001f;
+  float dx_dt = (x - xPrev) / dt;
+  float Fs = -K * (x - SPRING_DIST);
+  float Ft = -C * dx_dt;
+  float a = (Fs + Ft) / M;
   float v = vPrev + (a * dt);
   float abs_v = fabs(v);
-  uint8_t new_pwm = 0;
-  if (abs_v > 0.5) {
-    new_pwm = PWM_MIN + ((PWM_MAX - PWM_MIN) / V_MAX) * abs_v;
-    if (new_pwm > PWM_MAX) new_pwm = PWM_MAX;
+  uint8_t new_pwm = PWM_MIN;
+  if (abs_v > 0.01f) {
+    float scaled_pwm = PWM_MIN + (float)(PWM_MAX - PWM_MIN) * (abs_v / V_MAX);
+    if (scaled_pwm > PWM_MAX) scaled_pwm = PWM_MAX;
+    new_pwm = (uint8_t)scaled_pwm;
     w.setSpeed(new_pwm);
+  } else {
+    w.setSpeed(PWM_MIN);
   }
-  if (v < 0) w.back();
-  else if (v > 0) w.forward();
+  if (v < -0.01f) w.back();
+  else if (v > 0.01f) w.forward();
   else w.stop();
   vPrev = v;
   tPrev = t;
@@ -370,7 +371,7 @@ void setup() {
   lcd.init();
   lcd.backlight();
 
-  IrReceiver.begin(IR_PIN, ENABLE_LED_FEEDBACK);
+  IrReceiver.begin(IR, ENABLE_LED_FEEDBACK);
 
   w.configureWheels(
     DEF_SPEED, 
